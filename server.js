@@ -6,7 +6,14 @@ const Message = require("./models/Message");
 require("dotenv").config();
 const app = express();
 app.use(express.json());
-app.use(cors());
+// app.use(cors());
+app.use(
+  cors({
+    origin: "https://marvelous-tapioca-d5802c.netlify.app", // Your frontend URL
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
 app.use(bodyParser.json());
 
 const mongoURI = process.env.MONGO_URI; // ✅ Read from .env
@@ -43,6 +50,12 @@ app.get("/messages", async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+app.get("/", (req, res) => {
+  res.send("Backend is running...");
+});
+
+
 app.post("/api/contact", async (req, res) => {
   try {
     const { name, email, message } = req.body;
