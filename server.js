@@ -3,17 +3,34 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const Message = require("./models/Message");
+const { Server } = require("socket.io");
+const http = require("http");
 require("dotenv").config();
 const app = express();
+const server = http.createServer(app);
 app.use(express.json());
-// app.use(cors());
-app.use(
-  cors({
-    origin: "https://marvelous-tapioca-d5802c.netlify.app", // Your frontend URL
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: "http://localhost:3000",  // Allow frontend origin
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ["websocket", "polling"],  // Ensure WebSocket support
+});
+
+io.on("connection", (socket) => {
+  console.log("A user connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
 app.use(bodyParser.json());
 
 const mongoURI = process.env.MONGO_URI; // ✅ Read from .env
@@ -29,6 +46,7 @@ mongoose
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
+  
 // API to send and save messages
 app.post("/send-message", async (req, res) => {
   try {
@@ -55,6 +73,48 @@ app.get("/", (req, res) => {
   res.send("Backend is running...");
 });
 
+// Chat Schema
+const ChatSchema = new mongoose.Schema(
+  {
+    name: String,
+    message: String,
+    timestamp: { type: Date, default: Date.now },
+  },
+  { collection: "chats" }
+);
+
+const Chat = mongoose.model("Chat", new mongoose.Schema({ name: String, message: String }));
+Chat.find().then(console.log);
+// API to Get Previous Messages
+app.get("/api/messages", async (req, res) => {
+  try {
+    const messages = await Chat.find().sort({ timestamp: 1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Socket.io Real-time Messaging
+io.on("connection", (socket) => {
+  console.log("A recruiter connected!");
+
+  socket.on("sendMessage", async (data) => {
+    const { name, message } = data;
+    const newMessage = new Chat({ name, message });
+    await newMessage.save();
+
+    io.emit("receiveMessage", newMessage);
+  });
+
+  socket.on("sendMessage", async (data) => {
+    console.log("Received Message:", data); // ✅ Debugging
+    const { name, message } = data;
+    const newMessage = new Chat({ name, message });
+    await newMessage.save();
+    io.emit("receiveMessage", newMessage);
+  });
+});
 
 app.post("/api/contact", async (req, res) => {
   try {
